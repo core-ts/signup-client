@@ -6,11 +6,11 @@ export interface Phones {
 }
 // tslint:disable-next-line:class-name
 export class resources {
-  static phonecodes: Phones = null;
+  static phonecodes?: Phones;
   static email = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*(\.[a-zA-Z]{2,4})$/i;
   static phone = /^\d{5,14}$/;
 }
-export interface SignupInfo {
+export interface User {
   username: string;
   password: string;
   contact?: string;
@@ -26,6 +26,9 @@ export interface SignupInfo {
   dateOfBirth?: Date;
   */
 }
+export type SignupInfo = User;
+export type Signup = User;
+export type UserRegistration = User;
 export interface ErrorMessage {
   field: string;
   code: string;
@@ -44,7 +47,7 @@ export interface SignupResult {
   errors?: ErrorMessage[];
 }
 
-export interface SignupService<S extends SignupInfo> {
+export interface SignupService<S extends User> {
   signup(user: S): Promise<SignupResult>;
   verifyUser?(id: string, code: string): Promise<boolean>;
   verifyUserAndSavePassword?(id: string, code: string, password: string): Promise<boolean|number>;
@@ -59,7 +62,8 @@ export interface HttpRequest {
   put<T>(url: string, obj: any, options?: {headers?: Headers}): Promise<T>;
   patch<T>(url: string, obj: any, options?: {headers?: Headers}): Promise<T>;
 }
-export class SignupClient<S extends SignupInfo> implements SignupService<S> {
+// tslint:disable-next-line:max-classes-per-file
+export class Client<S extends User> implements SignupService<S> {
   constructor(protected http: HttpRequest, protected url: string, protected url2: string) {
     this.signup = this.signup.bind(this);
     this.verifyUser = this.verifyUser.bind(this);
@@ -77,7 +81,8 @@ export class SignupClient<S extends SignupInfo> implements SignupService<S> {
     return this.http.post(s, password);
   }
 }
-
+export const UserRegistrationClient = Client;
+export const SignupClient = Client;
 export interface ResourceService {
   resource(): any;
   value(key: string, param?: any): string;
@@ -131,13 +136,13 @@ export function isValidUsername(s: string): boolean {
   const s2 = s + '@gmail.com';
   return isEmail(s2);
 }
-export function isEmpty(str: string): boolean {
+export function isEmpty(str?: string): boolean {
   return (!str || str === '');
 }
 export function createError(code: string, field: string, msg: string): ErrorMessage {
   return { code, field, message: msg };
 }
-export function validate<T extends SignupInfo>(user: T, r: ResourceService, checkUsername: (s1: string) => boolean, checkContact: (s1: string) => boolean, requiredPassword: boolean, confirmPassword: string, reg?: RegExp, showError?: (m: string, field?: string) => void): boolean|ErrorMessage[] {
+export function validate<T extends User>(user: T, r: ResourceService, checkUsername: (s1: string) => boolean, checkContact: (s1?: string) => boolean, requiredPassword: boolean, confirmPassword: string, reg?: RegExp, showError?: (m: string, field?: string) => void): boolean|ErrorMessage[] {
   if (showError) {
     if (isEmpty(user.username)) {
       const msg = r.format(r.value('error_required'), r.value('username'));
@@ -213,8 +218,8 @@ export function validate<T extends SignupInfo>(user: T, r: ResourceService, chec
         }
         if (user.password !== confirmPassword) {
           const msg = r.value('error_confirm_password');
-          showError(msg, 'confirmPassword');
-          return false;
+          const e = createError('equal', 'confirmPassword', msg);
+          errs.push(e);
         }
       }
     }
@@ -232,33 +237,34 @@ export function getMessage(status: SignupStatus, r: ResourceService): string {
     return r.value('fail_sign_up');
   }
 }
-export async function signup<S extends SignupInfo> (
+export function signup<S extends User> (
   register: (user: S) => Promise<SignupResult>,
   user: S, r: ResourceService,
   showMessage: (msg: string, field?: string) => void,
   showError: (msg: string, field?: string) => void,
   handleError: (err: any) => void,
-  loading?: LoadingService) {
-  try {
-    if (loading) {
-      loading.showLoading();
-    }
-    const result = await register(user);
-    const msg = getMessage(result.status, r);
-    if (result.status === SignupStatus.Success) {
+  loading?: LoadingService): void {
+  if (loading) {
+    loading.showLoading();
+  }
+  register(user).then(res => {
+    const msg = getMessage(res.status, r);
+    if (res.status === SignupStatus.Success) {
       showMessage(msg);
     } else {
       showError(msg);
     }
-  } catch (err) {
-    handleError(err);
-  } finally {
     if (loading) {
       loading.hideLoading();
     }
-  }
+  }).catch(err => {
+    handleError(err);
+    if (loading) {
+      loading.hideLoading();
+    }
+  });
 }
-export async function validateAndSignup<S extends SignupInfo> (
+export function validateAndSignup<S extends User> (
     register: (user: S) => Promise<SignupResult>,
     user: S,
     passRequired: boolean,
@@ -268,13 +274,13 @@ export async function validateAndSignup<S extends SignupInfo> (
     showError: (msg: string, field?: string) => void,
     hideMessage: (field?: string) => void,
     chkUsername: (s1: string) => boolean,
-    chkContact: (s1: string) => boolean,
+    chkContact: (s1?: string) => boolean,
     check: (u: S, r2: ResourceService, valUsername: (s1: string) => boolean, valContact: (s1: string) => boolean, requirePass: boolean, confirmPassword: string, reg?: RegExp, showE?: (m: string, field?: string) => void) => boolean|ErrorMessage[],
     handleError: (err: any) => void,
     reg?: RegExp,
     loading?: LoadingService,
     showCustomError?: (msg: string|ErrorMessage[]) => void) {
-  const s = (showCustomError ? null : showError);
+  const s = (showCustomError ? undefined : showError);
   const results = check(user, r, chkUsername, chkContact, passRequired, confirmPassword, reg, s);
   if (results === false) {
     return;
