@@ -4,6 +4,15 @@ export const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-
 export interface Phones {
   [key: string]: string;
 }
+export interface Status {
+  success: string|number;
+  username: string|number;
+  contact: string|number;
+  error: string|number;
+  format_username: string|number;
+  format_contact: string|number;
+  format_password: string|number;
+}
 // tslint:disable-next-line:class-name
 export class resources {
   static phonecodes?: Phones;
@@ -41,16 +50,15 @@ export enum SignupStatus {
   ContactError = 2,
   Error = 4
 }
-export interface SignupResult {
+export interface Result {
   status: SignupStatus;
   message?: string;
   errors?: ErrorMessage[];
 }
-
+export type SignupResult = Result;
 export interface SignupService<S extends User> {
-  signup(user: S): Promise<SignupResult>;
-  verifyUser?(id: string, code: string): Promise<boolean>;
-  verifyUserAndSavePassword?(id: string, code: string, password: string): Promise<boolean|number>;
+  signup(user: S): Promise<Result|string|number>;
+  verify?(id: string, code: string): Promise<boolean>;
 }
 interface Headers {
   [key: string]: any;
@@ -66,27 +74,26 @@ export interface HttpRequest {
 export class Client<S extends User> implements SignupService<S> {
   constructor(protected http: HttpRequest, protected url: string, protected url2: string) {
     this.signup = this.signup.bind(this);
-    this.verifyUser = this.verifyUser.bind(this);
-    this.verifyUserAndSavePassword = this.verifyUserAndSavePassword.bind(this);
+    this.verify = this.verify.bind(this);
   }
-  signup(signupInfo: S): Promise<SignupResult> {
-    return this.http.post<SignupResult>(this.url, signupInfo);
+  signup(user: S): Promise<Result|string|number> {
+    return this.http.post<Result|string|number>(this.url, user);
   }
-  verifyUser(id: string, code: string): Promise<boolean> {
+  verify(id: string, code: string, password?: string): Promise<boolean> {
     const s = this.url2 + '/' + id + '/' + code;
-    return this.http.get<boolean>(s);
-  }
-  verifyUserAndSavePassword(id: string, code: string, password: string): Promise<boolean|number> {
-    const s = this.url2 + '/' + id + '/' + code;
-    return this.http.post(s, password);
+    const p = password ? password : '';
+    return this.http.post<boolean>(s, { password: p});
   }
 }
 export const UserRegistrationClient = Client;
 export const SignupClient = Client;
+export interface StringMap {
+  [key: string]: string;
+}
 export interface ResourceService {
-  resource(): any;
+  resource(): StringMap;
   value(key: string, param?: any): string;
-  format(...args: any[]): string;
+  format(f: string, ...args: any[]): string;
 }
 export interface LoadingService {
   showLoading(firstTime?: boolean): void;
@@ -117,7 +124,7 @@ export function isPhone(str: string): boolean {
     }
   }
 }
-export function isEmail(email: string): boolean {
+export function isEmail(email?: string): boolean {
   if (!email || email.length === 0) {
     return false;
   }
@@ -226,20 +233,27 @@ export function validate<T extends User>(user: T, r: ResourceService, checkUsern
     return errs;
   }
 }
-export function getMessage(status: SignupStatus, r: ResourceService): string {
-  if (status === SignupStatus.Success) {
-    return r.value('success_sign_up');
-  } else if (status === SignupStatus.UserNameError) {
-    return r.value('error_sign_up_username');
-  } else if (status === SignupStatus.ContactError) {
-    return r.value('error_sign_up_contact');
+export function getMessage(res: string|number, status: Status, r: StringMap): string {
+  if (res === status.success) {
+    return r.success_sign_up;
+  } else if (res === status.username) {
+    return r.error_sign_up_username;
+  } else if (res === status.contact) {
+    return r.error_sign_up_contact;
+  } else if (res === status.format_username) {
+    return r.error_username;
+  } else if (res === status.format_contact) {
+    return r.error_contact;
+  } else if (res === status.format_password) {
+    return r.error_password_exp;
   } else {
-    return r.value('fail_sign_up');
+    return r.fail_sign_up;
   }
 }
 export function signup<S extends User> (
-  register: (user: S) => Promise<SignupResult>,
-  user: S, r: ResourceService,
+  register: (user: S) => Promise<Result|string|number>,
+  status: Status,
+  user: S, r: StringMap,
   showMessage: (msg: string, field?: string) => void,
   showError: (msg: string, field?: string) => void,
   handleError: (err: any) => void,
@@ -248,8 +262,9 @@ export function signup<S extends User> (
     loading.showLoading();
   }
   register(user).then(res => {
-    const msg = getMessage(res.status, r);
-    if (res.status === SignupStatus.Success) {
+    const s = (typeof res === 'string' || typeof res === 'number' ? res : res.status);
+    const msg = getMessage(s, status, r);
+    if (s === status.success) {
       showMessage(msg);
     } else {
       showError(msg);
@@ -265,7 +280,8 @@ export function signup<S extends User> (
   });
 }
 export function validateAndSignup<S extends User> (
-    register: (user: S) => Promise<SignupResult>,
+    register: (user: S) => Promise<Result|string|number>,
+    status: Status,
     user: S,
     passRequired: boolean,
     confirmPassword: string,
@@ -275,7 +291,7 @@ export function validateAndSignup<S extends User> (
     hideMessage: (field?: string) => void,
     chkUsername: (s1: string) => boolean,
     chkContact: (s1?: string) => boolean,
-    check: (u: S, r2: ResourceService, valUsername: (s1: string) => boolean, valContact: (s1: string) => boolean, requirePass: boolean, confirmPassword: string, reg?: RegExp, showE?: (m: string, field?: string) => void) => boolean|ErrorMessage[],
+    check: (u: S, r2: ResourceService, valUsername: (s1: string) => boolean, valContact: (s1?: string) => boolean, requirePass: boolean, confirmPassword: string, reg?: RegExp, showE?: (m: string, field?: string) => void) => boolean|ErrorMessage[],
     handleError: (err: any) => void,
     reg?: RegExp,
     loading?: LoadingService,
@@ -292,5 +308,5 @@ export function validateAndSignup<S extends User> (
   } else {
     hideMessage();
   }
-  signup(register, user, r, showMessage, showError, handleError, loading);
+  signup(register, status, user, r.resource(), showMessage, showError, handleError, loading);
 }
