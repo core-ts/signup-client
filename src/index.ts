@@ -90,11 +90,6 @@ export const SignupClient = Client;
 export interface StringMap {
   [key: string]: string;
 }
-export interface ResourceService {
-  resource(): StringMap;
-  value(key: string, param?: any): string;
-  format(f: string, ...args: any[]): string;
-}
 export interface LoadingService {
   showLoading(firstTime?: boolean): void;
   hideLoading(): void;
@@ -149,39 +144,50 @@ export function isEmpty(str?: string): boolean {
 export function createError(code: string, field: string, msg: string): ErrorMessage {
   return { code, field, message: msg };
 }
-export function validate<T extends User>(user: T, r: ResourceService, checkUsername: (s1: string) => boolean, checkContact: (s1?: string) => boolean, requiredPassword: boolean, confirmPassword: string, reg?: RegExp, showError?: (m: string, field?: string) => void): boolean|ErrorMessage[] {
+export function formatText(...args: any[]): string {
+  let formatted = args[0]
+  if (!formatted || formatted === "") {
+    return ""
+  }
+  for (let i = 1; i < args.length; i++) {
+    const regexp = new RegExp("\\{" + (i - 1) + "\\}", "gi")
+    formatted = formatted.replace(regexp, args[i])
+  }
+  return formatted
+}
+export function validate<T extends User>(user: T, r: StringMap, checkUsername: (s1: string) => boolean, checkContact: (s1?: string) => boolean, requiredPassword: boolean, confirmPassword: string, reg?: RegExp, showError?: (m: string, field?: string) => void): boolean|ErrorMessage[] {
   if (showError) {
     if (isEmpty(user.username)) {
-      const msg = r.format(r.value('error_required'), r.value('username'));
+      const msg = formatText(r.error_required, r.username);
       showError(msg, 'username');
       return false;
     } else if (checkUsername && !checkUsername(user.username)) {
-      const msg = r.format(r.value('error_username'));
+      const msg = formatText(r.error_username);
       showError(msg, 'username');
       return false;
     }
     if (isEmpty(user.contact)) {
-      const msg = r.format(r.value('error_required'), r.value('contact'));
+      const msg = formatText(r.error_required, r.contact);
       showError(msg, 'contact');
       return false;
     } else if (checkContact && !checkContact(user.contact)) {
-        const msg = r.format(r.value('error_contact'));
+        const msg = formatText(r.error_contact);
         showError(msg, 'contact');
         return false;
     }
     if (requiredPassword) {
       if (isEmpty(user.password)) {
-        const msg = r.format(r.value('error_required'), r.value('password'));
+        const msg = formatText(r.error_required, r.password);
         showError(msg, 'password');
         return false;
       } else {
         if (reg && !reg.test(user.password)) {
-          const msg = r.value('error_password_exp');
+          const msg = r.error_password_exp;
           showError(msg, 'password');
           return false;
         }
         if (user.password !== confirmPassword) {
-          const msg = r.value('error_confirm_password');
+          const msg = r.error_confirm_password;
           showError(msg, 'confirmPassword');
           return false;
         }
@@ -191,40 +197,40 @@ export function validate<T extends User>(user: T, r: ResourceService, checkUsern
   } else {
     const errs: ErrorMessage[] = [];
     if (isEmpty(user.username)) {
-      const msg = r.format(r.value('error_required'), r.value('username'));
+      const msg = formatText(r.error_required, r.username);
       const e = createError('required', 'username', msg);
       errs.push(e);
     } else if (checkUsername) {
       if (!checkUsername(user.username)) {
-        const msg = r.format(r.value('error_username'));
+        const msg = formatText(r.error_username);
         const e = createError('exp', 'username', msg);
         errs.push(e);
       }
     }
     if (isEmpty(user.contact)) {
-      const msg = r.format(r.value('error_required'), r.value('contact'));
+      const msg = formatText(r.error_required, r.contact);
       const e = createError('required', 'contact', msg);
       errs.push(e);
     } else if (checkContact) {
       if (!checkContact(user.contact)) {
-        const msg = r.format(r.value('error_contact'));
+        const msg = formatText(r.error_contact);
         const e = createError('exp', 'contact', msg);
         errs.push(e);
       }
     }
     if (requiredPassword) {
       if (isEmpty(user.password)) {
-        const msg = r.format(r.value('error_required'), r.value('password'));
+        const msg = formatText(r.error_required, r.password);
         const e = createError('required', 'password', msg);
         errs.push(e);
       } else {
         if (reg && !reg.test(user.password)) {
-          const msg = r.format(r.value('error_password_exp'), r.value('password'));
+          const msg = formatText(r.error_password_exp, r.password);
           const e = createError('exp', 'password', msg);
           errs.push(e);
         }
         if (user.password !== confirmPassword) {
-          const msg = r.value('error_confirm_password');
+          const msg = r.error_confirm_password;
           const e = createError('equal', 'confirmPassword', msg);
           errs.push(e);
         }
@@ -285,13 +291,13 @@ export function validateAndSignup<S extends User> (
     user: S,
     passRequired: boolean,
     confirmPassword: string,
-    r: ResourceService,
+    r: StringMap,
     showMessage: (msg: string, field?: string) => void,
     showError: (msg: string, field?: string) => void,
     hideMessage: (field?: string) => void,
     chkUsername: (s1: string) => boolean,
     chkContact: (s1?: string) => boolean,
-    check: (u: S, r2: ResourceService, valUsername: (s1: string) => boolean, valContact: (s1?: string) => boolean, requirePass: boolean, confirmPassword: string, reg?: RegExp, showE?: (m: string, field?: string) => void) => boolean|ErrorMessage[],
+    check: (u: S, r2: StringMap, valUsername: (s1: string) => boolean, valContact: (s1?: string) => boolean, requirePass: boolean, confirmPassword: string, reg?: RegExp, showE?: (m: string, field?: string) => void) => boolean|ErrorMessage[],
     handleError: (err: any) => void,
     reg?: RegExp,
     loading?: LoadingService,
@@ -308,5 +314,5 @@ export function validateAndSignup<S extends User> (
   } else {
     hideMessage();
   }
-  signup(register, status, user, r.resource(), showMessage, showError, handleError, loading);
+  signup(register, status, user, r, showMessage, showError, handleError, loading);
 }
